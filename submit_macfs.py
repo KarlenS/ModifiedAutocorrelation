@@ -1,13 +1,13 @@
 import subprocess
 import os
-#import time
+import time
 import errno
 import numpy as np
 import argparse
 
 
 
-def submit_job(macf_func = 'macf.py',macfDir='macf',logDir='log',args='',tscale=1.):
+def submit_job(macf_func = 'macf.py',macfDir='macfs',logDir='logs',args='',tscale=1.):
 
     #create directory for logs, if it doesn't already exist
     try:
@@ -49,7 +49,7 @@ def main():
 
     for dt in tscales:
         macf_args = '-f %s -t %s' %(args.f,dt)
-        submit_job(args=macf_args)        
+        submit_job(args=macf_args,tscale = dt)
 
     print '%s jobs submitted.' %np.size(tscales)
 

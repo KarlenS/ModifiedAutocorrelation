@@ -1,4 +1,4 @@
-macf
-log
+macfs
+logs
 *.pyc
 *.ipyn*

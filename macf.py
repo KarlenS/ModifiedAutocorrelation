@@ -44,7 +44,7 @@ class TimeDomainAnalysis(object):
     
     def processLCs(self,tte,dt, nbins = 20,delay_res=0.02):
 
-        self.macf_outfile = 'macf/macf_%.2f.dat' %dt
+        self.macf_outfile = 'macfs/macf_%.3i.dat' %dt
         
         # force series to start at 0
         tte = tte.subtract(tte['t'].min())
@@ -62,7 +62,7 @@ class TimeDomainAnalysis(object):
     
         tte = tte.set_index('chunk')
 
-        delays = np.arange(0,dt*nbins,delay_res*dt) - dt*nbins
+        delays = np.arange(0,2*dt*nbins,delay_res*dt) - dt*nbins
        
         ccfs = np.zeros_like(delays)
 
