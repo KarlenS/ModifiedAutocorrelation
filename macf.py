@@ -2,142 +2,121 @@
 
 .. _Li (2009): http://adsabs.harvard.edu/abs/2001ChJAA...1..313L
 '''
-
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-import argparse
 
-import time
-
-def readData(filename):
-    return pd.read_csv(filename, delim_whitespace=True,usecols=[0],names=['t'],header=0) 
-
-def calculateMACF(lc):
-    return calculateMCCF(lc,lc)
+class TimeDomainAnalysis(object):
 
 
-def delayLC(lc):
+    def __init__(self,filename):
+        self.filename = filename
+        self.mccf_outfile = None
 
-    print lc.index*0.1
-    #return delayed_lc
+    def readData(self):
+        return pd.read_csv(self.filename, delim_whitespace=True,usecols=[0],names=['t'],header=0) 
 
-def calculateMCCF(lc, delayed_lc):
-
-    v1 = np.subtract(lc,np.mean(lc))
-    v2 = np.subtract(delayed_lc,np.mean(delayed_lc))
-
-    sigma1 = np.sum(np.square(v1))
-    sigma2 = np.sum(np.square(v2))
-
-    return v1*v2 / sigma1 / sigma2 #equation 20
-
-
-def constructLCs(tte,dt, nbins = 20,delay=0):
+    def writeMCCF(self,mccf):
+        np.savetxt(self.macf_outfile,np.transpose(mccf),fmt='.4e%')
     
-    # force series to start at 0
-    tte = tte.subtract(tte['t'].min())
-
-    # introduce delay
-    tte_delayed = tte.add(delay)
-
-    # divisor to chop up light curves into chunks
-    chunk_bounds = nbins * dt
-
-    # create bins column following the required dt
-    bins = dt*np.floor(tte['t']/dt)
-    tte['bin'] = bins
-    tte_delayed['bin'] = bins
-
-    chunks = chunk_bounds*np.floor(tte['bin']/chunk_bounds)
-    tte['chunk'] = chunks
-    tte_delayed['chunk'] = chunks
-
-    tte = tte.set_index('chunk')
-    tte_delayed = tte_delayed.set_index('chunk')
-
-    lc_list = []
-    delayed_lc_list = []
-    #handling the case where single-row chunks get turned series...
-    for chunk in np.unique(tte.index):
-        try:
-            tte.ix[chunk].groupby('bin').size()
-            tte_delayed.ix[chunk].groupby('bin').size()
-            lc_list.append(tte.ix[chunk].groupby('bin').size())
-            delayed_lc_list.append(tte_delayed.ix[chunk].groupby('bin').size())
-        except ValueError:
-            if isinstance(tte.ix[chunk]['bin'],np.float64):
-                lc_list.append(tte.ix[chunk].to_frame().transpose().groupby('bin').size())
-            elif isinstance(tte_delayed.ix[chunk]['bin'],np.float64):
-                delayed_lc_list.append(tte_delayed.ix[chunk].to_frame().transpose().groupby('bin').size())
-            else:
-                raise ValueError('Single-valued series-to-frame conversion failed.')
-
-
-    return [lc_list,delayed_lc_list]
-
-
-    #return [ tte.ix[chunk].groupby('bin').size() for chunk in np.unique(tte.index) ]
-
-    # create a light curve by counting up events in each bin
-    #lc = tte.groupby('bin').size()
+    def calculateMACF(self,base_lc,del_lc):
     
+        v = base_lc.subtract(base_lc.mean())
+        v_del = del_lc.subtract(del_lc.mean())
+        var = v.apply(lambda x: x**2).sum()
+        macf = v.multiply(v_del)/var
+    
+        return macf.sum()
+    
+    def calculateMCCF(self,base_lc, del_lc):
+    
+        v = base_lc.subtract(base_lc.mean())
+        v_del = del_lc.subtract(del_lc.mean())
+        sigma1 = np.sqrt(v.apply(lambda x: x**2).sum())
+        sigma2 = np.sqrt(v_del.apply(lambda x: x**2).sum())
+        mccf = v.multiply(v_del)/sigma1/sigma2
+    
+        return mccf.sum() 
+    
+    
+    def processLCs(self,tte,dt, nbins = 20,delay_res=0.02):
 
-    # forcing uniform binning (othewise no bins for 0 counts) - this part might not be necessary... not sure
-    #lc_bins = np.arange(tte['t'].min(),tte['t'].max(),dt)
-    #zeros = np.zeros_like(lc_bins)
-   
-    # creating uniform bin dataframe with 0 counts and merging with the light curve
-    # null_lc = pd.DataFrame(zeros,index = lc_bins,columns=['zeros'])
-    # data_lc = pd.DataFrame(lc.values,index = lc.index.values,columns=['counts'])
+        self.macf_outfile = 'macf/macf_%.2f.dat' %dt
+        
+        # force series to start at 0
+        tte = tte.subtract(tte['t'].min())
 
-    #print data_lc
+        # create bins column following the required dt
+        tte['bin'] = dt*np.floor(tte['t']/dt)
 
-    #full_lc = pd.concat([data_lc,null_lc],axis=1)
-    #full_lc = full_lc.fillna(0)
+        # get longer individual light curves
+        if np.abs(dt) < 10:
+            nbins = 100
+        chunk_bounds = nbins * dt
 
+        chunk = chunk_bounds*np.floor(tte['bin']/chunk_bounds)
+        tte['chunk'] = chunk 
+    
+        tte = tte.set_index('chunk')
 
-    #print np.array_split( full_lc['counts'] , chunks ) 
-    #print np.array_split(np.array(full_lc['counts']),3)
+        delays = np.arange(0,2*dt*nbins,delay_res*dt) - dt*nbins
+        ccfs = np.zeros_like(delays)
 
-    #print np.array_split(full_lc['counts'],3)
-    #returning light curve split into chunks
-    #return np.array_split( full_lc['counts'] , chunks )
+        for count,delay in enumerate(delays):
+            # introduce delay
+            tte['t_delayed'] = tte['t'].add(delay)
+    
+            # divisor to chop up light curves into chunks
+            # higher dt will have longer but fewer chunks
+    
+            tte['delayed_bin'] = dt*np.floor_divide(tte['t_delayed'],dt)
+    
+            ccf_val = 0.
+            achunks = np.unique(tte.index)
+            nchunks = np.size(achunks)
+            #handling the case where single-row chunks get turned series...
+            for chunk in achunks:
+                try:
+                    base_lc = tte.ix[chunk].groupby('bin').size()
+                    del_lc = tte.ix[chunk].groupby('delayed_bin').size()
+                    #running average of ccfs
+                    ccf_val += calculateMACF(base_lc,del_lc) / nchunks
+                except ValueError:
+                    if isinstance(tte.ix[chunk]['bin'],np.float64):
+                        base_lc = tte.ix[chunk].to_frame().transpose().groupby('bin').size()
+                    elif isinstance(tte.ix[chunk]['delayed_bin'],np.float64):
+                        del_lc = tte.ix[chunk].to_frame().transpose().groupby('delayed_bin').size()
+                    else:
+                        raise ValueError('Single-valued series-to-frame conversion failed.')
+                    ccf_val += calculateMACF(base_lc,del_lc) / nchunks
 
+            ccfs[count] = ccf_val
+    
+        return np.array([delays,ccfs])
 
 def main():
-    start_time = time.time()
-
-    parser = argparse.ArgumentParser(description='Calculates the modified autocorrelation function (MACF), provided a file with time-tagged events.')
-    parser.add_argument('-f',required=True,help='File containing the time-tagged event list.')
-    args = parser.parse_args()
-
-    tte = readData(args.f)
-
 
     # have light curves divided into chunks and binned for each dt
     # outer list is divided by dt, inner divided by chunks
     # 0 count bins are not included
 
-    #all_lcs = [ constructLCs(tte,dt) for dt in np.arange(1,300,1.) ]
-    #delayed_lcs = [ constructLCs(tte,dt,delay=10) for dt in np.arange(1,300,1.) ]
+    #start_time = time.time()
 
-    
-    for delay in np.arange(1.,300.,0.02):
-        b,z = constructLCs(tte,1,delay=delay)
-        if not (np.size(z[0].index) == np.size(b[0].index)):
-            print 'fuck', delay, z[0].index, b[0].index
+    parser = argparse.ArgumentParser(description='Calculates the modified autocorrelation function (MACF), provided a file with time-tagged events.')
+    parser.add_argument('-f',required=True,help='File containing the time-tagged event list.')
+    parser.add_argument('-t',required=True,help='Time scale to search for variability.')
+    args = parser.parse_args()
 
-    #delayLC(all_lcs[0][0])
 
-    print "|o|o|o|o| %s seconds |o|o|o|o|" % (time.time() - start_time)
-     
+    tda = TimeDomainAnalysis(args.f)
 
-    
+    tte = tda.readData()
 
-    #lcs = constructLCs(tte,1.)
+    nbins = 20
+    delay_res = 0.02
 
-    #macf = calculateMACF()
+    mccf = tda.processLCs( tte,args.t,arg='',delay=delay_res,nbins=nbins )
+    tda.writeMCCF(mccf)
+
 
 
 if __name__ == '__main__':
