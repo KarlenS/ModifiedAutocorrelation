@@ -4,6 +4,7 @@
 '''
 import numpy as np
 import pandas as pd
+import argparse
 
 class TimeDomainAnalysis(object):
 
@@ -79,7 +80,7 @@ class TimeDomainAnalysis(object):
                     base_lc = tte.ix[chunk].groupby('bin').size()
                     del_lc = tte.ix[chunk].groupby('delayed_bin').size()
                     #running average of ccfs
-                    ccf_val += calculateMACF(base_lc,del_lc) / nchunks
+                    mean_ccf += calculateMACF(base_lc,del_lc) / nchunks
                 except ValueError:
                     if isinstance(tte.ix[chunk]['bin'],np.float64):
                         base_lc = tte.ix[chunk].to_frame().transpose().groupby('bin').size()
@@ -87,9 +88,9 @@ class TimeDomainAnalysis(object):
                         del_lc = tte.ix[chunk].to_frame().transpose().groupby('delayed_bin').size()
                     else:
                         raise ValueError('Single-valued series-to-frame conversion failed.')
-                    ccf_val += calculateMACF(base_lc,del_lc) / nchunks
+                    mean_ccf += calculateMACF(base_lc,del_lc) / nchunks
 
-            ccfs[count] = ccf_val
+            ccfs[count] = mean_ccf
     
         return np.array([delays,ccfs])
 
