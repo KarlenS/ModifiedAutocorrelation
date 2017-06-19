@@ -1,12 +1,15 @@
-'''Module for calculating the modified autocorrelation function described in `Li (2009)`_. This method calculates temporal properties, e.g, power density, coherence, and time lag in the time domain, without utilizing Fourier transforms. The method is optimimal for studying rapid variablity on short time scales.
-
-.. _Li (2009): http://adsabs.harvard.edu/abs/2001ChJAA...1..313L
-'''
+#!/local/gammasoft/anaconda2/bin/python
+import time
 import numpy as np
 import pandas as pd
 import argparse
 
 class TimeDomainAnalysis(object):
+
+    '''Module for calculating the modified autocorrelation function described in `Li (2009)`_. This method calculates temporal properties, e.g, power density, coherence, and time lag in the time domain, without utilizing Fourier transforms. The method is optimimal for studying rapid variablity on short time scales.
+    
+    .. _Li (2009): http://adsabs.harvard.edu/abs/2001ChJAA...1..313L
+    '''
 
 
     def __init__(self,filename):
@@ -17,7 +20,7 @@ class TimeDomainAnalysis(object):
         return pd.read_csv(self.filename, delim_whitespace=True,usecols=[0],names=['t'],header=0) 
 
     def writeMCCF(self,mccf):
-        np.savetxt(self.macf_outfile,np.transpose(mccf),fmt='.4e%')
+        np.savetxt(self.macf_outfile,np.transpose(mccf),fmt='%.4e')
     
     def calculateMACF(self,base_lc,del_lc):
     
@@ -59,10 +62,12 @@ class TimeDomainAnalysis(object):
     
         tte = tte.set_index('chunk')
 
-        delays = np.arange(0,2*dt*nbins,delay_res*dt) - dt*nbins
+        delays = np.arange(0,dt*nbins,delay_res*dt) - dt*nbins
+       
         ccfs = np.zeros_like(delays)
 
         for count,delay in enumerate(delays):
+            print 'on delay %s' %delay
             # introduce delay
             tte['t_delayed'] = tte['t'].add(delay)
     
@@ -71,7 +76,7 @@ class TimeDomainAnalysis(object):
     
             tte['delayed_bin'] = dt*np.floor_divide(tte['t_delayed'],dt)
     
-            ccf_val = 0.
+            mean_ccf = 0.
             achunks = np.unique(tte.index)
             nchunks = np.size(achunks)
             #handling the case where single-row chunks get turned series...
@@ -80,7 +85,7 @@ class TimeDomainAnalysis(object):
                     base_lc = tte.ix[chunk].groupby('bin').size()
                     del_lc = tte.ix[chunk].groupby('delayed_bin').size()
                     #running average of ccfs
-                    mean_ccf += calculateMACF(base_lc,del_lc) / nchunks
+                    mean_ccf += self.calculateMACF(base_lc,del_lc) / nchunks
                 except ValueError:
                     if isinstance(tte.ix[chunk]['bin'],np.float64):
                         base_lc = tte.ix[chunk].to_frame().transpose().groupby('bin').size()
@@ -88,7 +93,7 @@ class TimeDomainAnalysis(object):
                         del_lc = tte.ix[chunk].to_frame().transpose().groupby('delayed_bin').size()
                     else:
                         raise ValueError('Single-valued series-to-frame conversion failed.')
-                    mean_ccf += calculateMACF(base_lc,del_lc) / nchunks
+                    mean_ccf += self.calculateMACF(base_lc,del_lc) / nchunks
 
             ccfs[count] = mean_ccf
     
@@ -100,13 +105,13 @@ def main():
     # outer list is divided by dt, inner divided by chunks
     # 0 count bins are not included
 
-    #start_time = time.time()
 
     parser = argparse.ArgumentParser(description='Calculates the modified autocorrelation function (MACF), provided a file with time-tagged events.')
     parser.add_argument('-f',required=True,help='File containing the time-tagged event list.')
-    parser.add_argument('-t',required=True,help='Time scale to search for variability.')
+    parser.add_argument('-t',type=float,required=True,help='Time scale to search for variability.')
     args = parser.parse_args()
 
+    start_time = time.time()
 
     tda = TimeDomainAnalysis(args.f)
 
@@ -115,8 +120,10 @@ def main():
     nbins = 20
     delay_res = 0.02
 
-    mccf = tda.processLCs( tte,args.t,arg='',delay=delay_res,nbins=nbins )
+    mccf = tda.processLCs( tte,args.t,delay_res=delay_res,nbins=nbins )
     tda.writeMCCF(mccf)
+
+    print 'Finished running in %s seconds.' %(time.time() - start_time)
 
 
 

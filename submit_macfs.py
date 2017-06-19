@@ -7,11 +7,20 @@ import argparse
 
 
 
-def submit_job(macf_func = 'macf.py',logDir='log',args='',tscale=1.):
+def submit_job(macf_func = 'macf.py',macfDir='macf',logDir='log',args='',tscale=1.):
 
     #create directory for logs, if it doesn't already exist
     try:
         os.makedirs(logDir)
+    except OSError as exc:
+        if exc.errno == errno.EEXIST and os.path.isdir(logDir):
+            pass
+        else:
+            raise IOError
+
+    #create directory for logs, if it doesn't already exist
+    try:
+        os.makedirs(macfDir)
     except OSError as exc:
         if exc.errno == errno.EEXIST and os.path.isdir(logDir):
             pass
@@ -26,7 +35,7 @@ def submit_job(macf_func = 'macf.py',logDir='log',args='',tscale=1.):
                                     'getenv=true', '/data/gammaray/users/shahin/Mrk421_autocorr/macfsignaloptimizationmc/vegas.submit'],stdout=subprocess.PIPE)
 
     job_submit, error = submitOut.communicate()
-    return [job_submit,error]
+    #return [job_submit,error]
 
 
 def main():
@@ -36,13 +45,13 @@ def main():
     args = parser.parse_args()
 
 
-    tscales = [5.] 
-    #tscales = np.concatenate([np.arange(1,21,1),np.arange(25,125,5)])
+    tscales = np.concatenate([np.arange(1,21,1),np.arange(25,125,5)])
 
     for dt in tscales:
-        args = '-f %s -t %s' %(args.f,dt)
-        submit_job(args=args)        
+        macf_args = '-f %s -t %s' %(args.f,dt)
+        submit_job(args=macf_args)        
 
+    print '%s jobs submitted.' %np.size(tscales)
 
         #print "|o|o|o|o| delta_t %s done in %s seconds |o|o|o|o|" % (dt,time.time() - start_time)
 
