@@ -45,7 +45,8 @@ def main():
     args = parser.parse_args()
 
 
-    tscales = np.concatenate([np.arange(1,21,1),np.arange(25,125,5)])
+    tscales = np.concatenate([np.arange(1,121,1),np.arange(125,305,5)])
+    #tscales = np.concatenate([np.arange(1,21,1),np.arange(25,125,5)])
 
     for dt in tscales:
         macf_args = '-f %s -t %s' %(args.f,dt)
