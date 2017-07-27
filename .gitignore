@@ -2,3 +2,4 @@ macfs
 logs
 *.pyc
 *.ipyn*
+data

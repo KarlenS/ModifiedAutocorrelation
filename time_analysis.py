@@ -6,7 +6,7 @@ import argparse
 
 class TimeDomainAnalysis(object):
 
-    '''Module for calculating the modified autocorrelation function described in `Li (2009)`_. This method calculates temporal properties, e.g, power density, coherence, and time lag in the time domain, without utilizing Fourier transforms. The method is optimimal for studying rapid variablity on short time scales.
+    '''Module for calculating temporal properties described in `Li (2009)`_, including power density, coherence, variability duration, and time lag in the time domain, without utilizing Fourier transforms. The method is optimimal for studying rapid variablity on short time scales.
     
     .. _Li (2009): http://adsabs.harvard.edu/abs/2001ChJAA...1..313L
     '''
@@ -22,7 +22,7 @@ class TimeDomainAnalysis(object):
     def writeMCCF(self,mccf):
         np.savetxt(self.macf_outfile,np.transpose(mccf),fmt='%.4e')
     
-    def calculateMACF(self,base_lc,del_lc):
+    def getMACF(self,base_lc,del_lc):
     
         v = base_lc.subtract(base_lc.mean())
         v_del = del_lc.subtract(del_lc.mean())
@@ -31,7 +31,7 @@ class TimeDomainAnalysis(object):
     
         return macf.sum()
     
-    def calculateMCCF(self,base_lc, del_lc):
+    def getMCCF(self,base_lc, del_lc):
     
         v = base_lc.subtract(base_lc.mean())
         v_del = del_lc.subtract(del_lc.mean())
@@ -40,12 +40,10 @@ class TimeDomainAnalysis(object):
         mccf = v.multiply(v_del)/sigma1/sigma2
     
         return mccf.sum() 
-    
-    
-    def delayLCs(self,tte,dt, nbins = 20,delay_res=0.02):
 
-        self.macf_outfile = 'macfs/macf_%.3i.dat' %dt
-        
+
+    def prepForLCs(self, tte, dt, nbins = 20):
+
         # force series to start at 0
         tte = tte.subtract(tte['t'].min())
 
@@ -60,7 +58,28 @@ class TimeDomainAnalysis(object):
         chunk = chunk_bounds*np.floor(tte['bin']/chunk_bounds)
         tte['chunk'] = chunk 
     
-        tte = tte.set_index('chunk')
+        return tte.set_index('chunk')
+
+    def varPow(self,lc):
+        return 1./np.size(lc)*np.sum(np.square(lc - np.mean(lc)))
+
+    def getPSD(self,tte, dt, nbins = 20):
+
+        self.psd_outfile = 'psd.dat'
+
+        tte = self.prepForLCs(tte,dt,nbins = nbins)
+
+
+        achunks = np.unique(tte.index)
+        nchunks = np.size(achunks)
+
+        
+    
+    def calculateMACFs(self,tte,dt, nbins = 20,delay_res=0.02):
+
+        self.macf_outfile = 'macfs/macf_%.3i.dat' %dt
+        
+        tte = self.prepForLCs(tte,dt,nbins = nbins)
 
         delays = np.arange(0,2*dt*nbins,delay_res*dt) - dt*nbins
        
@@ -85,7 +104,7 @@ class TimeDomainAnalysis(object):
                     base_lc = tte.ix[chunk].groupby('bin').size()
                     del_lc = tte.ix[chunk].groupby('delayed_bin').size()
                     #running average of ccfs
-                    mean_ccf += self.calculateMACF(base_lc,del_lc) / nchunks
+                    mean_ccf += self.getMACF(base_lc,del_lc) / nchunks
                 except ValueError:
                     if isinstance(tte.ix[chunk]['bin'],np.float64):
                         base_lc = tte.ix[chunk].to_frame().transpose().groupby('bin').size()
@@ -93,7 +112,7 @@ class TimeDomainAnalysis(object):
                         del_lc = tte.ix[chunk].to_frame().transpose().groupby('delayed_bin').size()
                     else:
                         raise ValueError('Single-valued series-to-frame conversion failed.')
-                    mean_ccf += self.calculateMACF(base_lc,del_lc) / nchunks
+                    mean_ccf += self.getMACF(base_lc,del_lc) / nchunks
 
             ccfs[count] = mean_ccf
     
@@ -120,7 +139,7 @@ def main():
     nbins = 20
     delay_res = 0.02
 
-    mccf = tda.delayLCs( tte,args.t,delay_res=delay_res,nbins=nbins )
+    mccf = tda.calculateMACFs(tte,args.t,delay_res=delay_res,nbins=nbins )
     tda.writeMCCF(mccf)
 
     print 'Finished running in %s seconds.' %(time.time() - start_time)
